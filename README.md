@@ -25,7 +25,7 @@ Este sistema permite o controle completo de clientes, pets, produtos, serviços,
 ### 💼 Secretária (`/secretaria`)
 - Cadastrar e editar clientes e pets
 - Processar pagamentos (dinheiro e serviços)
-- Visualizar vendas, serviços e produtos
+- Visualizar produtos
 - Cancelar pagamentos
 
 ---
@@ -113,8 +113,8 @@ Este sistema permite o controle completo de clientes, pets, produtos, serviços,
 
 ## 👥 Colaboradores
 
-- [Ivaneudo](https://github.com/Ivaneudo)
-- [Laura](https://github.com/lcruzz)
+- Front-end: [Ivaneudo](https://github.com/Ivaneudo)
+- Back-end: [Laura](https://github.com/lcruzz)
 
 ---
 
