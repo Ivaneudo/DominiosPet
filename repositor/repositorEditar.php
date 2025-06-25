@@ -1,31 +1,34 @@
 <?php
-    session_start();
-    include('../funcoes/conexao.php');
+session_start();
+include('../funcoes/conexao.php');
 
-    // Verifica se o usuário é um repositor
-    if ($_SESSION['tipo_usuario'] !== 'repositor'){
-        header("Location: ../entrada/Entrar.php"); // Redireciona se não for repositor
-        exit();
-    }
+// Verifica se o usuário é um repositor
+if ($_SESSION['tipo_usuario'] !== 'repositor'){
+    header("Location: ../entrada/Entrar.php");
+    exit();
+}
 
-    // Captura o nome do funcionário da sessão
-    $nomeFuncionario = $_SESSION['usuario'];
+// Captura o nome do funcionário da sessão
+$nomeFuncionario = $_SESSION['usuario'];
 
-    // Inicializa variáveis
-    $codigoProduto = '';
-    $nomeProduto = '';
-    $precoProduto = '';
-    $estoqueProduto = '';
-    $mensagem = '';
+// Inicializa variáveis
+$codigoProduto = '';
+$nomeProduto = '';
+$precoProduto = '';
+$estoqueProduto = '';
+$mensagem = '';
+$produtoEncontrado = false;
 
-    // Se o formulário foi enviado
-    if ($_SERVER["REQUEST_METHOD"] == "POST") {
+// Se o formulário foi enviado
+if ($_SERVER["REQUEST_METHOD"] == "POST") {
+    // Verifica se é busca ou modificação
+    if (isset($_POST['buscar'])) {
         // Se o código do produto foi enviado
-        if (isset($_POST['codigo']) && !empty(trim($_POST['codigo']))) {
+        if (!empty(trim($_POST['codigo']))) {
             $codigoProduto = trim($_POST['codigo']);
 
             // Busca o produto pelo ID
-            $sql = "SELECT nome_produto, preco, estoque FROM produto WHERE id_produto = ? LIMIT 1";
+            $sql = "SELECT id_produto, nome_produto, preco, estoque FROM produto WHERE id_produto = ? LIMIT 1";
             $stmt = $conn->prepare($sql);
             $stmt->bind_param("i", $codigoProduto);
             $stmt->execute();
@@ -33,22 +36,30 @@
 
             if ($result->num_rows > 0) {
                 $produto = $result->fetch_assoc();
+                $codigoProduto = $produto['id_produto'];
                 $nomeProduto = $produto['nome_produto'];
-                $precoProduto = $produto['preco'];
+                $precoProduto = number_format($produto['preco'], 2, ',', '.');
                 $estoqueProduto = $produto['estoque'];
+                $produtoEncontrado = true;
             } else {
                 $mensagem = "Produto não encontrado.";
+                $codigoProduto = '';
             }
+        } else {
+            $mensagem = "Por favor, informe o código do produto.";
         }
+    } elseif (isset($_POST['modificar'])) {
+        // Valida e sanitiza os dados do formulário
+        $codigoProduto = isset($_POST['codigo']) ? trim($_POST['codigo']) : '';
+        $nomeProduto = isset($_POST['nome']) ? trim($_POST['nome']) : '';
+        $precoProduto = isset($_POST['preco']) ? str_replace(['.', ','], ['', '.'], $_POST['preco']) : 0;
+        $estoqueProduto = isset($_POST['estoque']) ? intval($_POST['estoque']) : 0;
 
-        // Se o botão de modificar foi clicado
-        if (isset($_POST['modificar'])) {
-            $nomeProduto = trim($_POST['nome']);
-            // Substitui vírgula por ponto para ponto decimal, se enviado com vírgula
-            $precoProduto = floatval(str_replace(',', '.', $_POST['preco']));
-            $estoqueProduto = intval($_POST['estoque']);
-            $codigoProduto = trim($_POST['codigo']); // Garante que o código está definido
-
+        if (empty($codigoProduto)) {
+            $mensagem = "Código do produto inválido.";
+        } elseif (empty($nomeProduto)) {
+            $mensagem = "Nome do produto é obrigatório.";
+        } else {
             // Atualiza o produto no banco de dados
             $sqlUpdate = "UPDATE produto SET nome_produto = ?, preco = ?, estoque = ? WHERE id_produto = ?";
             $stmtUpdate = $conn->prepare($sqlUpdate);
@@ -56,16 +67,25 @@
 
             if ($stmtUpdate->execute()) {
                 $mensagem = "Produto atualizado com sucesso!";
-                // Limpa os campos após a atualização
-                $codigoProduto = '';
-                $nomeProduto = '';
-                $precoProduto = '';
-                $estoqueProduto = '';
+                $produtoEncontrado = true;
+                
+                // Busca os dados atualizados para mostrar no formulário
+                $sql = "SELECT nome_produto, preco, estoque FROM produto WHERE id_produto = ?";
+                $stmt = $conn->prepare($sql);
+                $stmt->bind_param("i", $codigoProduto);
+                $stmt->execute();
+                $result = $stmt->get_result();
+                $produto = $result->fetch_assoc();
+                
+                $nomeProduto = $produto['nome_produto'];
+                $precoProduto = number_format($produto['preco'], 2, ',', '.');
+                $estoqueProduto = $produto['estoque'];
             } else {
-                $mensagem = "Erro ao atualizar o produto.";
+                $mensagem = "Erro ao atualizar o produto: " . $stmtUpdate->error;
             }
         }
     }
+}
 ?>
 
 <!DOCTYPE html>
@@ -99,7 +119,7 @@
                 <p>Olá <span id="colaborador"><?php echo htmlspecialchars($nomeFuncionario); ?></span>, bem-vindo a mais um dia de trabalho!</p>
             </div>
             <div class="sair">
-                <a href="../funcoes/logout.php"><img src="../img/sair.svg" alt=""></a>
+                <a href="../funcoes/logout.php"><img src="../img/sair.svg" alt="Sair"></a>
             </div>
         </div>
         <div class="cadastrar" id="repositor">
@@ -115,81 +135,66 @@
                         <h3>Editar Produto:</h3>
                         <label for="codigo">Pesquisar ID do Produto:</label>
                         <input
-                            type="text"
+                            type="number"
                             name="codigo"
                             id="codigo"
                             placeholder="Digite o ID do produto"
                             autocomplete="off"
                             value="<?php echo htmlspecialchars($codigoProduto); ?>"
+                            min="1"
                             required>
-                        <button type="submit">Buscar</button>
+                        <button type="submit" name="buscar">Buscar</button>
                     </div>
-                    <div class="botoes">
-                        <div class='voltarSome'>
-                            <a href="repositor.php">
-                                <button class="voltar" id="volt" type="button">Voltar</button>
-                            </a>
-                        </div>
                 </form>
 
-                <?php if (!empty($codigoProduto) && !empty($nomeProduto)): ?>
+                <?php if ($produtoEncontrado): ?>
                     <form method="POST" action="">
+                        <input type="hidden" name="codigo" value="<?php echo htmlspecialchars($codigoProduto); ?>">
+                        
                         <div class="cliente">
                             <div class="colunas">
-
                                 <div class="coluna">
-
                                     <label for="codigo">Código do produto:</label>
                                     <input
-                                        type="number"
-                                        name="codigo"
+                                        type="text"
                                         class="NomeCliente"
-                                        placeholder="Código do Produto: "
-                                        autocomplete="off"
-                                        min="1"
-                                        max="999"
-                                        maxlength="3"
-                                        disabled
+                                        placeholder="Código do Produto"
                                         value="<?php echo htmlspecialchars($codigoProduto); ?>"
+                                        disabled
                                         style="color: #6c6b6b; cursor: not-allowed;">
 
                                     <label for="preco">Preço:</label>
                                     <input
-                                        type="number"
+                                        type="text"
                                         id="preco"
                                         name="preco"
-                                        placeholder="Preço do produto: "
+                                        placeholder="Preço do produto"
                                         autocomplete="off"
-                                        min="0"
-                                        step="0.01"
                                         value="<?php echo htmlspecialchars($precoProduto); ?>"
                                         required>
                                 </div>
 
                                 <div class="coluna">
-
                                     <label for="nome">Nome do produto:</label>
                                     <input
                                         type="text"
                                         name="nome"
                                         class="Telefone"
-                                        placeholder="Nome do produto: "
+                                        placeholder="Nome do produto"
                                         autocomplete="off"
                                         value="<?php echo htmlspecialchars($nomeProduto); ?>"
-                                        required
-                                    >
+                                        required>
 
                                     <label for="estoque">Estoque:</label>
                                     <input
                                         type="number"
                                         name="estoque"
                                         class="Email"
-                                        placeholder="Estoque: "
+                                        placeholder="Quantidade em estoque"
                                         autocomplete="off"
                                         min="0"
                                         value="<?php echo htmlspecialchars($estoqueProduto); ?>"
-                                        required
-                                    >
+                                        required>
                                 </div>
                             </div>
                         </div>
@@ -206,10 +211,8 @@
                         </div>
                     </form>
                 <?php endif; ?>
-
             </div>
         </div>
     </div>
 </body>
 </html>
-

@@ -2,9 +2,9 @@
     session_start();
     include('../funcoes/conexao.php');
 
-    // ! Verifica qual o cargo do funcionário logado
+    // Verifica qual o cargo do funcionário logado
     if ($_SESSION['tipo_usuario'] !== 'secretaria') {
-        header("Location: ../entrada/Entrar.php"); // ! Redireciona se não for secretaria
+        header("Location: ../entrada/Entrar.php"); // Redireciona se não for secretaria
         exit();
     }
 
@@ -15,52 +15,73 @@
     $cpfCliente = '';
     $cliente = null;
     $mensagem = '';
-    $classeMensagem = ''; // Adiciona a variável para a classe da mensagem
+    $classeMensagem = '';
 
     // Se o formulário foi enviado
     if ($_SERVER["REQUEST_METHOD"] == "POST") {
-        // Se o CPF do cliente foi enviado
-        if (isset($_POST['cpfCliente']) && !empty(trim($_POST['cpfCliente']))) {
-            $cpfCliente = trim($_POST['cpfCliente']);
+        // Verifica se é pesquisa ou cadastro
+        if (isset($_POST['pesquisar'])) {
+            // Pesquisa por CPF
+            if (isset($_POST['cpfCliente']) && !empty(trim($_POST['cpfCliente']))) {
+                $cpfCliente = trim($_POST['cpfCliente']);
 
-            // Busca o cliente pelo CPF
-            $sql = "SELECT * FROM cliente WHERE cpf = ?";
-            $stmt = $conn->prepare($sql);
-            $stmt->bind_param("s", $cpfCliente);
-            $stmt->execute();
-            $result = $stmt->get_result();
+                // Busca o cliente pelo CPF
+                $sql = "SELECT * FROM cliente WHERE cpf = ?";
+                $stmt = $conn->prepare($sql);
+                $stmt->bind_param("s", $cpfCliente);
+                $stmt->execute();
+                $result = $stmt->get_result();
 
-            if ($result->num_rows > 0) {
-                $cliente = $result->fetch_assoc();
-            } else {
-                $mensagem = "Cliente não encontrado.";
-                $classeMensagem = 'erro'; // Define a classe de erro
+                if ($result->num_rows > 0) {
+                    $cliente = $result->fetch_assoc();
+                } else {
+                    $mensagem = "Cliente não encontrado.";
+                    $classeMensagem = 'erro';
+                }
             }
-        }
-
-        // Se o botão de cadastrar pet foi clicado
-        if (isset($_POST['cadastrarPet']) && $cliente) {
-            $nomePet = $_POST['nomePet'];
-            $idade = $_POST['idade'];
-            $especie = $_POST['animal'];
-            $sexo = $_POST['sexo'];
-            $peso = str_replace(',', '.', $_POST['peso']); // Substitui vírgula por ponto
-            $raca = $_POST['raca'];
-
-            // Insere os dados do pet no banco de dados
-            $sqlInsert = "INSERT INTO pet (nome_pet, idade, especie, sexo, peso, raca, cpf_dono) VALUES (?, ?, ?, ?, ?, ?, ?)";
-            $stmtInsert = $conn->prepare($sqlInsert);
-            $stmtInsert->bind_param("sisssss", $nomePet, $idade, $especie, $sexo, $peso, $raca, $cpfCliente);
-
-            if ($stmtInsert->execute()) {
-                $mensagem = "Pet cadastrado com sucesso!";
-                $classeMensagem = 'sucesso'; // Define a classe de sucesso
-                // Não redireciona para manter a mensagem após cadastro
-                // Limpa os dados do formulário para novo cadastro
-                $cliente = $cliente; // Mantém o cliente para mostrar o formulário novamente
+        } elseif (isset($_POST['cadastrarPet'])) {
+            // Cadastro de pet - agora verificamos se o cpfCliente está definido
+            $cpfCliente = isset($_POST['cpfCliente']) ? trim($_POST['cpfCliente']) : '';
+            
+            if (empty($cpfCliente)) {
+                $mensagem = "CPF do cliente não encontrado. Por favor, pesquise novamente.";
+                $classeMensagem = 'erro';
             } else {
-                $mensagem = "Erro ao cadastrar pet: " . $stmtInsert->error;
-                $classeMensagem = 'erro'; // Define a classe de erro
+                // Verifica se o cliente existe
+                $sql = "SELECT * FROM cliente WHERE cpf = ?";
+                $stmt = $conn->prepare($sql);
+                $stmt->bind_param("s", $cpfCliente);
+                $stmt->execute();
+                $result = $stmt->get_result();
+
+                if ($result->num_rows > 0) {
+                    $cliente = $result->fetch_assoc();
+                    
+                    $nomePet = trim($_POST['nomePet']);
+                    $idade = (int)$_POST['idade'];
+                    $especie = $_POST['animal'];
+                    $sexo = $_POST['sexo'];
+                    $peso = str_replace(',', '.', $_POST['peso']);
+                    $raca = trim($_POST['raca']);
+
+                    // Insere os dados do pet no banco de dados
+                    $sqlInsert = "INSERT INTO pet (nome_pet, idade, especie, sexo, peso, raca, cpf_dono) VALUES (?, ?, ?, ?, ?, ?, ?)";
+                    $stmtInsert = $conn->prepare($sqlInsert);
+                    $stmtInsert->bind_param("sisssss", $nomePet, $idade, $especie, $sexo, $peso, $raca, $cpfCliente);
+
+                    if ($stmtInsert->execute()) {
+                        $mensagem = "Pet cadastrado com sucesso!";
+                        $classeMensagem = 'sucesso';
+                        // Mantém o cliente para mostrar o formulário novamente
+                        $cliente = $cliente;
+                    } else {
+                        $mensagem = "Erro ao cadastrar pet: " . $stmtInsert->error;
+                        $classeMensagem = 'erro';
+                    }
+                } else {
+                    $mensagem = "Cliente não encontrado. Por favor, pesquise novamente.";
+                    $classeMensagem = 'erro';
+                }
             }
         }
     }
@@ -72,7 +93,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Cadastrar Pets</title>
-    <link rel="shortcut icon" href="../img/Logo-Pethop-250px .ico" type="image/x-icon" />
+    <link rel="shortcut icon" href="../img/Logo-Pethop-250px.ico" type="image/x-icon" />
     <link rel="stylesheet" href="../css/principal.css" />
     <link rel="stylesheet" href="../css/caixa.css" />
     <link rel="stylesheet" href="../css/caixaCadastro.css" />
@@ -106,6 +127,11 @@
             <div class="cadastro">
                 <form method="POST" action="">
                     <div class="pesquisa-clientes">
+                        <?php if ($mensagem): ?>
+                            <div class="mensagem-<?php echo $classeMensagem; ?>">
+                                <?php echo htmlspecialchars($mensagem); ?>
+                            </div>
+                        <?php endif; ?>
                         <h3>Cadastrar pet:</h3>
                         <label for="cpfCliente">Pesquisar CPF do Cliente:</label>
                         <input 
@@ -115,26 +141,21 @@
                             placeholder="Digite o CPF do cliente" 
                             value="<?php echo htmlspecialchars($cpfCliente); ?>" 
                             maxlength="14"
-                            autocomplete=off
+                            autocomplete="off"
                             required
                         >
-
                         <button type="submit" name="pesquisar">Pesquisar</button>
                     </div>
                 </form>
 
-                <?php if ($mensagem): ?>
-                    <div class="mensagem-<?php echo $classeMensagem; ?>">
-                        <?php echo htmlspecialchars($mensagem); ?>
-                    </div>
-                <?php endif; ?>
-
                 <?php if ($cliente): ?>
                     <form method="POST" action="">
+                        <!-- Campo oculto para manter o CPF -->
+                        <input type="hidden" name="cpfCliente" value="<?php echo htmlspecialchars($cpfCliente); ?>">
+                        
                         <p style="margin-bottom: 0.5rem;">Dados do dono:</p>
                         <div class="coluna">
                             <p style="margin-bottom: 0.3rem; margin-top: 0.5rem;"><strong>Cliente:</strong> <?php echo htmlspecialchars($cliente['nome']); ?></p>
-
                             <p style="margin-top: 0.5rem; margin-bottom: 2rem;"><strong>Email:</strong> <?php echo htmlspecialchars($cliente['email']); ?></p>
                         </div>
 
@@ -168,7 +189,7 @@
                                     name="nomePet" 
                                     class="nomePet" 
                                     placeholder="Nome do animal" 
-                                    autocomplete=off 
+                                    autocomplete="off" 
                                     required>
 
                                 <label for="idade">Idade:</label>
@@ -177,7 +198,7 @@
                                     name="idade" 
                                     class="idade" 
                                     placeholder="Idade do animal" 
-                                    autocomplete=off 
+                                    autocomplete="off" 
                                     required 
                                     min="0">
                             </div>
@@ -190,7 +211,6 @@
                                         name="sexo" 
                                         value="macho" 
                                         id="sexoMacho" 
-                                        autocomplete=off 
                                         required>
                                     <label for="sexoMacho">M</label>
                                     
@@ -200,7 +220,6 @@
                                         name="sexo" 
                                         value="femea" 
                                         id="sexoFemea" 
-                                        autocomplete=off 
                                         required>
                                     <label for="sexoFemea">F</label>
 
@@ -210,7 +229,6 @@
                                         name="sexo" 
                                         value="intersexo" 
                                         id="sexoIntersexo" 
-                                        autocomplete=off 
                                         required>
                                     <label for="sexoIntersexo">I</label>
                                 </div>
@@ -221,9 +239,8 @@
                                     name="peso" 
                                     class="peso" 
                                     placeholder="Peso" 
-                                    autocomplete=off
-                                    min="0"
-                                    pattern="^\d{1,3}(,\d{1,2})?$" 
+                                    autocomplete="off"
+                                    pattern="^\d+([,.]\d{1,2})?$" 
                                     required>
 
                                 <label for="raca">Raça:</label>
@@ -232,7 +249,7 @@
                                     name="raca" 
                                     class="raca" 
                                     placeholder="Digite a raça" 
-                                    autocomplete=off 
+                                    autocomplete="off" 
                                     required>
                             </div>
                         </div>
